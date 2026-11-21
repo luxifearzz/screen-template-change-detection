@@ -1,240 +1,102 @@
+"""
+ChangeAndClick - Entry point.
 
-import cv2
-import numpy as np
-import mss
-import time
-import pyautogui
+Wires together all dependencies (Composition Root) and starts the
+automation pipeline.  The pipeline runs on the REAL screen using mss
+for capture and pyautogui for mouse clicks.
+"""
 
-# =====================================
-# CONFIGURATION
-# =====================================
+import sys
+from pathlib import Path
 
-TEMPLATE_PATH = "images/template.png"
+# Ensure the project root is on sys.path so `src` is importable.
+ROOT_DIR = Path(__file__).resolve().parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
-MATCH_THRESHOLD = 0.92
-
-# ค่าเฉลี่ยความแตกต่างของ Pixel (0-255)
-CHANGE_THRESHOLD = 12.0
-
-# ต้องพบการเปลี่ยนแปลงต่อเนื่องกี่เฟรม
-CONFIRM_FRAMES = 3
-
-SCAN_INTERVAL = 0.5
-MONITOR_INTERVAL = 0.15
-
-COUNTDOWN_SECONDS = 3
-
-# =====================================
-# COUNTDOWN
-# =====================================
+from src.config.settings import load_config  # noqa: E402
+from src.core.change_detector import PixelChangeDetector  # noqa: E402
+from src.core.mouse_controller import PyAutoGuiMouseController  # noqa: E402
+from src.core.screen_capture import MssScreenCapturer  # noqa: E402
+from src.core.template_matcher import OpenCvTemplateMatcher  # noqa: E402
+from src.orchestrator import ScreenAutomationOrchestrator  # noqa: E402
+from src.stages.stage1 import Stage1InitialDetection  # noqa: E402
+from src.stages.stage2 import Stage2OptionDetection  # noqa: E402
 
 
-def countdown(seconds):
+def build_pipeline(config) -> ScreenAutomationOrchestrator:
+    """Assemble all components and return a configured orchestrator.
 
-    print("\nPrepare your screen...")
+    This is the Composition Root — the only place where concrete
+    implementations are instantiated and injected.
+    """
+    # --- Low-level dependencies -------------------------------------
+    screen_capturer = MssScreenCapturer(monitor_index=1)
+    template_matcher = OpenCvTemplateMatcher(
+        threshold=config.MATCH_THRESHOLD
+    )
+    change_detector = PixelChangeDetector(
+        change_threshold=config.CHANGE_THRESHOLD,
+        confirm_frames=config.CONFIRM_FRAMES,
+    )
+    mouse_controller = PyAutoGuiMouseController()
 
-    for remaining in range(seconds, 0, -1):
-
-        print(
-            f"\rStarting detection in {remaining} seconds...",
-            end="",
-            flush=True
-        )
-
-        time.sleep(1)
-
-    print("\nDetection started!\n")
-
-# =====================================
-# LOAD TEMPLATE
-# =====================================
-
-
-template = cv2.imread(
-    TEMPLATE_PATH,
-    cv2.IMREAD_GRAYSCALE
-)
-
-if template is None:
-    raise FileNotFoundError(TEMPLATE_PATH)
-
-h, w = template.shape
-
-print("Template loaded:", w, "x", h)
-
-
-# =====================================
-# SCREEN CAPTURE
-# =====================================
-
-sct = mss.mss()
-
-# ใช้จอหลัก
-monitor = sct.monitors[1]
-
-
-def capture_screen():
-    """Capture full primary screen."""
-    image = np.array(sct.grab(monitor))
-    return cv2.cvtColor(
-        image,
-        cv2.COLOR_BGRA2GRAY
+    # --- Stages ------------------------------------------------------
+    stage1 = Stage1InitialDetection(
+        config=config,
+        screen_capturer=screen_capturer,
+        template_matcher=template_matcher,
+        change_detector=change_detector,
+        mouse_controller=mouse_controller,
     )
 
-
-def capture_roi(x, y, w, h):
-    """Capture only the detected region."""
-    image = np.array(sct.grab({
-        "left": monitor["left"] + x,
-        "top": monitor["top"] + y,
-        "width": w,
-        "height": h
-    }))
-
-    return cv2.cvtColor(
-        image,
-        cv2.COLOR_BGRA2GRAY
+    stage2 = Stage2OptionDetection(
+        config=config,
+        screen_capturer=screen_capturer,
+        template_matcher=template_matcher,
+        mouse_controller=mouse_controller,
     )
 
+    # --- Orchestrator ------------------------------------------------
+    orchestrator = ScreenAutomationOrchestrator(config=config)
+    orchestrator.register_stage("STAGE_1", stage1)
+    orchestrator.register_stage("STAGE_2", stage2)
+    orchestrator.set_initial_stage("STAGE_1")
 
-# =====================================
-# STAGE 1: FULL SCREEN TEMPLATE SEARCH
-# =====================================
-
-def find_template():
-
-    screen = capture_screen()
-
-    result = cv2.matchTemplate(
-        screen,
-        template,
-        cv2.TM_CCOEFF_NORMED
-    )
-
-    _, score, _, location = cv2.minMaxLoc(result)
-
-    if score >= MATCH_THRESHOLD:
-
-        x, y = location
-
-        print(
-            f"Template found: "
-            f"x={x}, y={y}, score={score:.3f}"
-        )
-
-        return x, y
-
-    return None
+    return orchestrator, screen_capturer
 
 
-# =====================================
-# EVENT HANDLER
-# =====================================
+def main() -> None:
+    """Application entry point."""
+    print("ChangeAndClick starting...")
+    print("Real screen capture + mouse click mode.")
 
-def on_change_detected():
+    config = load_config()
 
-    print("\n!!! CHANGE DETECTED !!!")
+    # Validate that template files exist before starting.
+    required_templates = [
+        config.INITIAL_TEMPLATE_PATH,
+        config.OPTION_A_TEMPLATE_PATH,
+        config.OPTION_B_TEMPLATE_PATH,
+        config.FINISHED_TEMPLATE_PATH,
+    ]
+    for path in required_templates:
+        if not path.exists():
+            print(f"ERROR: Template not found: {path}")
+            sys.exit(1)
 
-    # =================================
-    # TEST MOUSE CLICK
-    # =================================
-    # เปิดใช้งานบรรทัดด้านล่างเฉพาะเมื่อ
-    # ทดสอบกับหน้าต่างและตำแหน่งที่ควบคุมได้
+    print("All templates found. Starting pipeline...")
 
-    pyautogui.click()
+    orchestrator, screen_capturer = build_pipeline(config)
 
-    print("Event triggered.")
-
-
-# =====================================
-# STAGE 2: ROI MONITORING
-# =====================================
-
-def monitor_roi(x, y):
-
-    print("\nStart ROI monitoring")
-
-    # เก็บภาพอ้างอิง ณ เวลาที่พบ Template
-    baseline = capture_roi(x, y, w, h)
-
-    changed_count = 0
-
-    while True:
-
-        current = capture_roi(x, y, w, h)
-
-        # 1. ตรวจคะแนน Template ใน ROI
-        result = cv2.matchTemplate(
-            current,
-            template,
-            cv2.TM_CCOEFF_NORMED
-        )
-
-        match_score = float(result[0, 0])
-
-        # 2. ตรวจความแตกต่างของ Pixel
-        diff = cv2.absdiff(
-            baseline,
-            current
-        )
-
-        change_score = float(np.mean(diff))
-
-        # 3. ตรวจว่ามีการเปลี่ยนแปลงหรือไม่
-        is_changed = (
-            match_score < MATCH_THRESHOLD
-            or change_score > CHANGE_THRESHOLD
-        )
-
-        if is_changed:
-            changed_count += 1
-        else:
-            changed_count = 0
-
-        print(
-            f"Match={match_score:.3f} | "
-            f"Change={change_score:.2f} | "
-            f"Count={changed_count}"
-        )
-
-        # 4. ยืนยันการเปลี่ยนแปลงต่อเนื่อง
-        if changed_count >= CONFIRM_FRAMES:
-
-            on_change_detected()
-            break
-
-        time.sleep(MONITOR_INTERVAL)
+    try:
+        orchestrator.run()
+    except KeyboardInterrupt:
+        print("\nStopped by user (Ctrl+C).")
+    finally:
+        screen_capturer.close()
+        print("Cleanup complete.")
 
 
-# =====================================
-# MAIN LOOP
-# =====================================
-
-try:
-
-    # Countdown ก่อนเริ่มตรวจจับ
-    countdown(COUNTDOWN_SECONDS)
-
-    print("Starting screen detection...")
-
-    while True:
-
-        location = find_template()
-
-        if location is not None:
-
-            x, y = location
-
-            monitor_roi(x, y)
-
-            break
-
-        time.sleep(SCAN_INTERVAL)
-
-except KeyboardInterrupt:
-
-    print("\nProgram stopped by user.")
-
-finally:
-
-    sct.close()
+if __name__ == "__main__":
+    main()

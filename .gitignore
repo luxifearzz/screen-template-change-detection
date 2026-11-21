@@ -1,2 +1,5 @@
+__pycache__/
+
+old-ver/
 test-images/
-images/template.png
+images/*/*.png

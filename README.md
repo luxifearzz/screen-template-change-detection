@@ -7,7 +7,7 @@
 python -m pip install -r requirements.txt
 ```
 
-- Import template image you want to detect it's position to `images/` folder
+- Import template image you want to detect it's position to `images/templates/` folder
 - Run the program using
 
 ```bash

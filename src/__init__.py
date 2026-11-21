@@ -1,0 +1,1 @@
+"""ChangeAndClick - Screen change detection and mouse automation package."""
