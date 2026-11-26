@@ -1,4 +1,4 @@
-## How To Use
+## How To Use (for Windows)
 
 - Has python installed
 - Create virtual environment and activated it using
