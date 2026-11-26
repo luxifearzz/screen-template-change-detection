@@ -3,3 +3,5 @@ __pycache__/
 old-ver/
 test-images/
 images/*/*.png
+
+*.lnk
