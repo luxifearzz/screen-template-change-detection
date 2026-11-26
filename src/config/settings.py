@@ -7,6 +7,7 @@ Values can be overridden via environment variables or a config file in the futur
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Tuple
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,13 @@ class AppConfig:
     # ------------------------------------------------------------------
     SCAN_INTERVAL: float = 0.5
     MONITOR_INTERVAL: float = 0.15
+
+    # ------------------------------------------------------------------
+    # Object coordinates
+    # ------------------------------------------------------------------
+    # Select only one at a time. Comment out line you not used.
+    CONNECT_BTN_COORDS: Tuple[int, int] | None = (1000, 280)
+    # CONNECT_BTN_COORDS: Tuple[int, int] | None = None
 
     # ------------------------------------------------------------------
     # Display / Debug

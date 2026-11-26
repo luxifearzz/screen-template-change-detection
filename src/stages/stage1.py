@@ -105,10 +105,18 @@ class Stage1InitialDetection(StageBase):
         # ----------------------------------------------------------
         # Step C: Action 01 — click once at current mouse position.
         # ----------------------------------------------------------
-        mx, my = self.mouse_controller.get_position()
-        print(
-            f"[Stage 1] Action 01: clicking at current mouse position ({mx},{my})")
-        self.mouse_controller.click_at_current_position()
+
+        # Click at default coordinates of connect button or click at current mouse position
+        if self.config.CONNECT_BTN_COORDS is not None:
+            mx, my = self.config.CONNECT_BTN_COORDS[0], self.config.CONNECT_BTN_COORDS[1]
+            print(
+                f"[Stage 1] Action 01: clicking at connect button coordinates ({mx},{my})")
+            self.mouse_controller.click_at(mx, my)
+        else:
+            mx, my = self.mouse_controller.get_position()
+            print(
+                f"[Stage 1] Action 01: clicking at current mouse position ({mx},{my})")
+            self.mouse_controller.click_at_current_position()
 
         self.change_detector.reset()
         return self.NEXT_STAGE
