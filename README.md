@@ -1,6 +1,12 @@
 ## How To Use
 
 - Has python installed
+- Create virtual environment using
+
+```bash
+python -m venv venv
+```
+
 - Install required lib using
 
 ```bash
