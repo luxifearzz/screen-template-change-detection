@@ -1,10 +1,11 @@
 ## How To Use
 
 - Has python installed
-- Create virtual environment using
+- Create virtual environment and activated it using
 
 ```bash
-python -m venv venv
+python -m venv .venv
+.venv\Scripts\activate
 ```
 
 - Install required lib using
